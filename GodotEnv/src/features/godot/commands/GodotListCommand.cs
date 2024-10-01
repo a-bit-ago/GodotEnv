@@ -22,7 +22,7 @@ public class GodotListCommand : ICommand, ICliCommand {
   }
 
   private static void ListLocalVersions(ILog log, IGodotRepository godotRepo) {
-    foreach (var installation in godotRepo.GetInstallationsList()) {
+    foreach (var installation in godotRepo.GetInstallationsList(log)) {
       var activeTag = installation.IsActiveVersion ? " *" : "";
       log.Print(installation.VersionName + activeTag);
     }

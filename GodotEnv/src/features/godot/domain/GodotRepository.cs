@@ -107,7 +107,7 @@ public interface IGodotRepository {
   /// Get the list of installed Godot versions.
   /// </summary>
   /// <returns>List of semantic versions.</returns>
-  List<GodotInstallation> GetInstallationsList();
+  List<GodotInstallation> GetInstallationsList(ILog log);
 
   /// <summary>
   /// Get the list of available Godot versions.
@@ -200,8 +200,10 @@ public partial class GodotRepository : IGodotRepository {
       return ReadInstallation(version, isDotnet);
     }
 
-    return ReadInstallation(version, isDotnetVersion: true) ??
-      ReadInstallation(version, isDotnetVersion: false);
+    var installation = ReadInstallation(version, isDotnetVersion: true);
+    if (installation != null) return installation;
+
+    return ReadInstallation(version, isDotnetVersion: false);
   }
 
   public void ClearCache() {
@@ -559,7 +561,7 @@ public partial class GodotRepository : IGodotRepository {
 
   public async Task<string> GetGodotEnvVariable() => await EnvironmentVariableClient.GetUserEnv(Defaults.GODOT_ENV_VAR_NAME);
 
-  public List<GodotInstallation> GetInstallationsList() {
+  public List<GodotInstallation> GetInstallationsList(ILog log) {
     var installations = new List<GodotInstallation>();
 
     if (!FileClient.DirectoryExists(GodotInstallationsPath)) {
@@ -571,21 +573,26 @@ public partial class GodotRepository : IGodotRepository {
 
       var versionParts = DirectoryToVersionStringRegex.Match(name);
       var versionString = $"{versionParts.Groups["major"].Value}." +
-        $"{versionParts.Groups["minor"].Value}." +
-        $"{versionParts.Groups["patch"].Value}";
+                          $"{versionParts.Groups["minor"].Value}." +
+                          $"{versionParts.Groups["patch"].Value}";
 
       var isDotnetVersion = dir.Name.Contains("dotnet");
 
-      var label = versionParts.Groups.ContainsKey("label") ?
-        versionParts.Groups["label"].Value : "";
+      var label = versionParts.Groups.TryGetValue("label", out var group) ?
+        group.Value : "";
       if (!string.IsNullOrWhiteSpace(label)) {
         versionString += $"-{label.Replace("_", ".")}";
       }
       var version = SemanticVersion.Parse(versionString);
 
-      var installation = GetInstallation(version, isDotnetVersion)!;
-
-      installations.Add(installation);
+      var installation = GetInstallation(version, isDotnetVersion);
+      if (installation != null) {
+        installations.Add(installation);
+      }
+      else {
+        log.Warn($"Failed to retrieve Godot installation for version {version}." +
+                 " Potential causes: invalid version, installation directory not found.");
+      }
     }
 
     return [.. installations.OrderBy(i => i.VersionName)];
